@@ -25,6 +25,11 @@ export const ForgotPasswordSchema = z.object({
   email: z.email({ error: "Please enter a valid email." }).trim(),
 });
 
+export const DirectoryLoginSchema = z.object({
+  username: z.string().trim().min(1, { error: "Enter your username." }),
+  password: z.string().min(1, { error: "Password is required." }),
+});
+
 export const OtpSchema = z.object({
   code: z.string().regex(/^\d{6}$/, { error: "Enter the 6-digit code." }),
 });

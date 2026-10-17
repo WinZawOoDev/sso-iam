@@ -8,13 +8,20 @@ import { hashPassword } from "@/lib/auth/password";
  * an external IdP, ...) and keep the signatures the same.
  */
 
+/** Accounts from external providers. Local accounts have no identities. */
+export type ExternalProvider = "google" | "github" | "ldap";
+
+export type Identity = { provider: ExternalProvider; externalId: string };
+
 export type User = {
   id: string;
   name: string;
   email: string;
-  passwordHash: string;
+  /** Absent for accounts created only through an external provider. */
+  passwordHash?: string;
   createdAt: string;
   emailVerified: boolean;
+  identities: Identity[];
   /** scrypt hash of the active one-time code, if any. */
   otpHash?: string;
   otpExpiresAt?: string;
@@ -24,6 +31,14 @@ export type User = {
 };
 
 export type PublicUser = Pick<User, "id" | "name" | "email">;
+
+export type ExternalProfile = {
+  provider: ExternalProvider;
+  externalId: string;
+  email: string;
+  emailVerified: boolean;
+  name: string;
+};
 
 type Store = { users: Map<string, User> };
 
@@ -46,6 +61,7 @@ async function createSeededStore(): Promise<Store> {
     passwordHash: await hashPassword("Password123!"),
     createdAt: new Date().toISOString(),
     emailVerified: true,
+    identities: [],
     otpAttempts: 0,
   };
   users.set(demo.id, demo);
@@ -98,10 +114,54 @@ export async function createUser(input: {
     passwordHash: input.passwordHash,
     createdAt: new Date().toISOString(),
     emailVerified: false,
+    identities: [],
     otpAttempts: 0,
   };
   users.set(user.id, user);
   return toPublic(user);
+}
+
+/**
+ * Resolves an external sign-in to a local account:
+ * 1. A known identity returns its account.
+ * 2. A matching email links to an existing account only when both the provider
+ *    and the existing account have verified that email. Otherwise an attacker
+ *    who pre-registered the address could be granted access to the real owner's
+ *    identity when that owner signs in through the provider.
+ * 3. Otherwise a new verified account is created.
+ */
+export async function findOrCreateExternalUser(
+  profile: ExternalProfile,
+): Promise<{ ok: true; user: PublicUser } | { ok: false; reason: "email_in_use" }> {
+  const { users } = await getStore();
+  const email = profile.email.trim().toLowerCase();
+
+  for (const user of users.values()) {
+    if (user.identities.some((i) => i.provider === profile.provider && i.externalId === profile.externalId)) {
+      return { ok: true, user: toPublic(user) };
+    }
+  }
+
+  const existing = [...users.values()].find((u) => u.email === email);
+  if (existing) {
+    if (!existing.emailVerified || !profile.emailVerified) {
+      return { ok: false, reason: "email_in_use" };
+    }
+    existing.identities.push({ provider: profile.provider, externalId: profile.externalId });
+    return { ok: true, user: toPublic(existing) };
+  }
+
+  const user: User = {
+    id: randomUUID(),
+    name: profile.name.trim() || email,
+    email,
+    createdAt: new Date().toISOString(),
+    emailVerified: profile.emailVerified,
+    identities: [{ provider: profile.provider, externalId: profile.externalId }],
+    otpAttempts: 0,
+  };
+  users.set(user.id, user);
+  return { ok: true, user: toPublic(user) };
 }
 
 export async function updateUser(
