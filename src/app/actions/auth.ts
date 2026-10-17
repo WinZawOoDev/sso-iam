@@ -6,11 +6,19 @@ import * as z from "zod";
 import {
   ForgotPasswordSchema,
   LoginSchema,
+  OtpSchema,
   RegisterSchema,
   type FormState,
 } from "@/lib/auth/definitions";
+import { checkOtp, completeVerification, sendOtp } from "@/lib/auth/otp";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { createSession, deleteSession } from "@/lib/auth/session";
+import {
+  clearPendingVerification,
+  createSession,
+  deleteSession,
+  getPendingVerificationUserId,
+  setPendingVerification,
+} from "@/lib/auth/session";
 import { createUser, findUserByEmail } from "@/lib/db/users";
 
 const str = (value: FormDataEntryValue | null) => String(value ?? "");
@@ -21,6 +29,13 @@ let dummyHash: Promise<string> | undefined;
 function getDummyHash() {
   dummyHash ??= hashPassword(randomUUID());
   return dummyHash;
+}
+
+/** Starts email verification for `userId` and moves the browser to the verify page. */
+async function startVerification(userId: string) {
+  await sendOtp(userId); // "cooldown" just means a code was sent recently; reuse it.
+  await setPendingVerification(userId);
+  redirect("/verify-otp");
 }
 
 export async function login(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -41,6 +56,12 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
 
   if (!user || !passwordOk) {
     return { message: "Invalid email or password.", fields: { email } };
+  }
+
+  // Only reached with the correct password, so this doesn't reveal anything to
+  // someone guessing credentials.
+  if (!user.emailVerified) {
+    await startVerification(user.id);
   }
 
   await createSession(user.id);
@@ -73,8 +94,52 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
     };
   }
 
-  await createSession(user.id);
+  // No session yet: the account is unverified. The user gets a session only
+  // after entering the code.
+  await startVerification(user.id);
+}
+
+export async function verifyOtp(_prev: FormState, formData: FormData): Promise<FormState> {
+  const code = str(formData.get("code")).replace(/\s/g, "");
+
+  const parsed = OtpSchema.safeParse({ code });
+  if (!parsed.success) {
+    return { errors: z.flattenError(parsed.error).fieldErrors };
+  }
+
+  const userId = await getPendingVerificationUserId();
+  if (!userId) redirect("/login");
+
+  const result = await checkOtp(userId, parsed.data.code);
+
+  if (result === "none") {
+    return { message: "No active code. Request a new one." };
+  }
+  if (result === "expired") {
+    return { message: "This code has expired. Request a new one." };
+  }
+  if (result === "locked") {
+    return { message: "Too many incorrect attempts. Request a new code." };
+  }
+  if (result === "invalid") {
+    return { message: "Incorrect code. Please try again." };
+  }
+
+  await completeVerification(userId);
+  await clearPendingVerification();
+  await createSession(userId);
   redirect("/dashboard");
+}
+
+export async function resendOtp(): Promise<FormState> {
+  const userId = await getPendingVerificationUserId();
+  if (!userId) redirect("/login");
+
+  const result = await sendOtp(userId);
+  if (result === "cooldown") {
+    return { message: "Please wait a moment before requesting another code." };
+  }
+  return { success: true, message: "A new code has been sent." };
 }
 
 export async function forgotPassword(

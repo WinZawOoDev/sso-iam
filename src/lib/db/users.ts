@@ -14,6 +14,13 @@ export type User = {
   email: string;
   passwordHash: string;
   createdAt: string;
+  emailVerified: boolean;
+  /** scrypt hash of the active one-time code, if any. */
+  otpHash?: string;
+  otpExpiresAt?: string;
+  /** Failed attempts against the active code. Reset when a new code is issued. */
+  otpAttempts: number;
+  otpSentAt?: string;
 };
 
 export type PublicUser = Pick<User, "id" | "name" | "email">;
@@ -31,13 +38,15 @@ function getStore() {
 async function createSeededStore(): Promise<Store> {
   const users = new Map<string, User>();
 
-  // Demo account so the dashboard can be tried immediately.
+  // Demo account so the dashboard can be tried immediately. Already verified.
   const demo: User = {
     id: randomUUID(),
     name: "Demo User",
     email: "demo@example.com",
     passwordHash: await hashPassword("Password123!"),
     createdAt: new Date().toISOString(),
+    emailVerified: true,
+    otpAttempts: 0,
   };
   users.set(demo.id, demo);
 
@@ -63,7 +72,13 @@ export async function findUserById(id: string): Promise<PublicUser | null> {
   return user ? toPublic(user) : null;
 }
 
-/** Returns null if the email is already registered. */
+/** Full record, including auth internals. Only for use inside server auth code. */
+export async function getUserRecordById(id: string): Promise<User | null> {
+  const { users } = await getStore();
+  return users.get(id) ?? null;
+}
+
+/** Returns null if the email is already registered. New accounts start unverified. */
 export async function createUser(input: {
   name: string;
   email: string;
@@ -82,7 +97,31 @@ export async function createUser(input: {
     email,
     passwordHash: input.passwordHash,
     createdAt: new Date().toISOString(),
+    emailVerified: false,
+    otpAttempts: 0,
   };
   users.set(user.id, user);
   return toPublic(user);
+}
+
+export async function updateUser(
+  id: string,
+  patch: Partial<Omit<User, "id" | "createdAt">>,
+): Promise<void> {
+  const { users } = await getStore();
+  const user = users.get(id);
+  if (user) Object.assign(user, patch);
+}
+
+/**
+ * Atomically increments the failed-attempt counter and returns the new value.
+ * Reserving the attempt before the code is checked means concurrent guesses
+ * can't all read the same count and bypass the limit.
+ */
+export async function incrementOtpAttempts(id: string): Promise<number> {
+  const { users } = await getStore();
+  const user = users.get(id);
+  if (!user) return Number.POSITIVE_INFINITY;
+  user.otpAttempts += 1;
+  return user.otpAttempts;
 }

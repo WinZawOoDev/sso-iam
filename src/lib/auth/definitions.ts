@@ -25,6 +25,16 @@ export const ForgotPasswordSchema = z.object({
   email: z.email({ error: "Please enter a valid email." }).trim(),
 });
 
+export const OtpSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, { error: "Enter the 6-digit code." }),
+});
+
+/** "jane@example.com" -> "j***@example.com", for display on the verify page. */
+export function maskEmail(email: string) {
+  const [local = "", domain = ""] = email.split("@");
+  return `${local.charAt(0)}***@${domain}`;
+}
+
 /**
  * Shared shape returned by auth Server Actions and consumed by
  * `useActionState`. `fields` echoes non-sensitive input back to the form so

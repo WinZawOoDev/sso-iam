@@ -1,8 +1,17 @@
 // Pure JWT helpers with no `server-only` import, so the proxy can use them too.
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 
 export const SESSION_COOKIE = "session";
 export const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60;
+
+export const PENDING_VERIFICATION_COOKIE = "pending_verification";
+export const PENDING_VERIFICATION_SECONDS = 15 * 60;
+
+// Each token carries a `purpose` claim so a token issued for one flow can't be
+// replayed in another. For example, a pending-verification token must not
+// count as a signed-in session.
+const PURPOSE_SESSION = "session";
+const PURPOSE_PENDING_VERIFICATION = "email-verification";
 
 export type SessionPayload = { userId: string };
 
@@ -16,30 +25,49 @@ function getSigningKey() {
   return new TextEncoder().encode(secret);
 }
 
-export async function encryptSession({ userId }: SessionPayload) {
-  return new SignJWT({ userId })
+async function signToken(purpose: string, userId: string, ttlSeconds: number) {
+  return new SignJWT({ userId, purpose })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DURATION_SECONDS}s`)
+    .setExpirationTime(`${ttlSeconds}s`)
     .sign(getSigningKey());
 }
 
-/** Returns the session payload, or null if the token is missing, invalid, or expired. */
-export async function decryptSession(
-  token: string | undefined,
-): Promise<SessionPayload | null> {
+/** Returns the user id if the token is valid, unexpired, and has the expected purpose. */
+async function readToken(purpose: string, token: string | undefined) {
   // Resolve the key outside the try block so a missing secret fails loudly
   // instead of silently logging every user out.
   const key = getSigningKey();
   if (!token) return null;
 
   try {
-    const { payload } = await jwtVerify(token, key, {
+    const { payload }: { payload: JWTPayload } = await jwtVerify(token, key, {
       algorithms: ["HS256"],
     });
+    if (payload.purpose !== purpose) return null;
     if (typeof payload.userId !== "string") return null;
-    return { userId: payload.userId };
+    return payload.userId;
   } catch {
     return null;
   }
+}
+
+export function encryptSession({ userId }: SessionPayload) {
+  return signToken(PURPOSE_SESSION, userId, SESSION_DURATION_SECONDS);
+}
+
+/** Returns the session payload, or null if the token is missing, invalid, or expired. */
+export async function decryptSession(
+  token: string | undefined,
+): Promise<SessionPayload | null> {
+  const userId = await readToken(PURPOSE_SESSION, token);
+  return userId ? { userId } : null;
+}
+
+export function encryptPendingVerification(userId: string) {
+  return signToken(PURPOSE_PENDING_VERIFICATION, userId, PENDING_VERIFICATION_SECONDS);
+}
+
+export async function decryptPendingVerification(token: string | undefined) {
+  return readToken(PURPOSE_PENDING_VERIFICATION, token);
 }
