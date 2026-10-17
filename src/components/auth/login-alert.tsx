@@ -8,6 +8,7 @@ const MESSAGES: Record<string, string> = {
   oauth_no_email: "Your provider account needs a verified email address to sign in.",
   oauth_not_configured: "This sign-in method is not configured yet.",
   email_in_use: "This email is already registered. Sign in with your password first.",
+  account_disabled: "This account has been disabled. Contact an administrator.",
 };
 
 export async function LoginAlert({

@@ -49,7 +49,9 @@ export async function GET(
   if (!profile.emailVerified) redirect("/login?error=oauth_no_email");
 
   const linked = await findOrCreateExternalUser(profile);
-  if (!linked.ok) redirect("/login?error=email_in_use");
+  if (!linked.ok) {
+    redirect(linked.reason === "disabled" ? "/login?error=account_disabled" : "/login?error=email_in_use");
+  }
 
   await createSession(linked.user.id);
   redirect("/dashboard");

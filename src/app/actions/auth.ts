@@ -60,6 +60,10 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
     return { message: "Invalid email or password.", fields: { email } };
   }
 
+  if (user.status !== "active") {
+    return { message: "This account has been disabled. Contact an administrator.", fields: { email } };
+  }
+
   // Only reached with the correct password, so this doesn't reveal anything to
   // someone guessing credentials.
   if (!user.emailVerified) {
@@ -197,7 +201,12 @@ export async function directoryLogin(_prev: FormState, formData: FormData): Prom
     name: result.name,
   });
   if (!linked.ok) {
-    return { message: "This email is already registered. Sign in with your password first." };
+    return {
+      message:
+        linked.reason === "disabled"
+          ? "This account has been disabled. Contact an administrator."
+          : "This email is already registered. Sign in with your password first.",
+    };
   }
 
   await createSession(linked.user.id);

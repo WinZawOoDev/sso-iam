@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { verifySession } from "@/lib/auth/dal";
+import { hasPermission } from "@/lib/auth/permissions";
 
 function getInitials(name: string) {
   return name
@@ -19,7 +20,10 @@ export async function DashboardShell({ children }: { children: React.ReactNode }
 
   return (
     <div className="flex flex-1 flex-col md:flex-row bg-muted/40">
-      <Sidebar />
+      <Sidebar
+        canViewUsers={hasPermission(user.permissions, "users:read")}
+        canViewRoles={hasPermission(user.permissions, "roles:read")}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center justify-end gap-4 border-b bg-background px-6">

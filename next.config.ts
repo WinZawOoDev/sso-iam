@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // Enables forbidden() for authorization failures on admin pages.
+    authInterrupts: true,
+  },
   turbopack: {
     rules: {
       "*.css": {

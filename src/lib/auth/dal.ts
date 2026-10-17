@@ -18,9 +18,9 @@ export const getCurrentUser = cache(async (): Promise<PublicUser | null> => {
 
 /**
  * Use in protected pages and layouts. Redirects when there is no valid session.
- * A cookie whose user no longer exists goes through a route handler that clears
- * it. Redirecting straight to /login would loop, because the proxy sends
- * signed-in users away from /login.
+ * A cookie whose user no longer exists, or whose account was disabled, goes
+ * through a route handler that clears it. Redirecting straight to /login would
+ * loop, because the proxy sends signed-in users away from /login.
  */
 export const verifySession = cache(async (): Promise<PublicUser> => {
   const userId = await getSessionUserId();
@@ -28,6 +28,7 @@ export const verifySession = cache(async (): Promise<PublicUser> => {
 
   const user = await findUserById(userId);
   if (!user) redirect("/api/auth/signout");
+  if (user.status !== "active") redirect("/api/auth/signout?reason=disabled");
 
   return user;
 });
