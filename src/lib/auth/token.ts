@@ -7,19 +7,13 @@ export const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60;
 export const PENDING_VERIFICATION_COOKIE = "pending_verification";
 export const PENDING_VERIFICATION_SECONDS = 15 * 60;
 
-export const OAUTH_STATE_COOKIE = "oauth_state";
-export const OAUTH_STATE_COOKIE_PATH = "/api/auth/oauth";
-export const OAUTH_STATE_SECONDS = 10 * 60;
-
 // Each token carries a `purpose` claim so a token issued for one flow can't be
 // replayed in another. For example, a pending-verification token must not
 // count as a signed-in session.
 const PURPOSE_SESSION = "session";
 const PURPOSE_PENDING_VERIFICATION = "email-verification";
-const PURPOSE_OAUTH_STATE = "oauth-state";
 
 export type SessionPayload = { userId: string };
-export type OAuthStatePayload = { provider: string; state: string; verifier: string };
 
 function getSigningKey() {
   const secret = process.env.SESSION_SECRET;
@@ -76,22 +70,4 @@ export function encryptPendingVerification(userId: string) {
 export async function decryptPendingVerification(token: string | undefined) {
   const payload = await readToken(PURPOSE_PENDING_VERIFICATION, token);
   return typeof payload?.userId === "string" ? payload.userId : null;
-}
-
-export function encryptOAuthState(state: OAuthStatePayload) {
-  return signToken(PURPOSE_OAUTH_STATE, { ...state }, OAUTH_STATE_SECONDS);
-}
-
-export async function decryptOAuthState(
-  token: string | undefined,
-): Promise<OAuthStatePayload | null> {
-  const payload = await readToken(PURPOSE_OAUTH_STATE, token);
-  if (
-    typeof payload?.provider !== "string" ||
-    typeof payload.state !== "string" ||
-    typeof payload.verifier !== "string"
-  ) {
-    return null;
-  }
-  return { provider: payload.provider, state: payload.state, verifier: payload.verifier };
 }

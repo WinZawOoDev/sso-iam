@@ -10,5 +10,9 @@ export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get("reason") === "disabled") {
     login.searchParams.set("error", "account_disabled");
   }
-  return NextResponse.redirect(login);
+  const response = NextResponse.redirect(login);
+  // Also clear Auth.js JWT sessions when an account is disabled or removed.
+  response.cookies.set("authjs.session-token", "", { path: "/", maxAge: 0 });
+  response.cookies.set("__Secure-authjs.session-token", "", { path: "/", maxAge: 0, secure: true });
+  return response;
 }

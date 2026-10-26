@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import {
   PENDING_VERIFICATION_COOKIE,
   SESSION_COOKIE,
@@ -7,15 +8,15 @@ import {
 } from "@/lib/auth/token";
 
 /**
- * Optimistic check only: verifies the cookie signature and expiry, without a
- * database lookup. Pages and actions still call `verifySession()` for the real check.
+ * Optimistic gate: checks Auth.js and local session cookies without looking up
+ * the app user. Protected pages and actions still call `verifySession()`.
  */
 const AUTH_PAGES = ["/login", "/register", "/forgot-password", "/verify-otp"];
 
-export async function proxy(request: NextRequest) {
+export const proxy = auth(async (request) => {
   const { pathname } = request.nextUrl;
   const session = await decryptSession(request.cookies.get(SESSION_COOKIE)?.value);
-  const isAuthenticated = session !== null;
+  const isAuthenticated = session !== null || Boolean(request.auth?.user);
 
   if (pathname === "/") {
     return NextResponse.redirect(
@@ -42,7 +43,7 @@ export async function proxy(request: NextRequest) {
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: ["/", "/login", "/register", "/forgot-password", "/verify-otp", "/dashboard/:path*"],

@@ -15,7 +15,7 @@ import {
  */
 
 /** Accounts from external providers. Local accounts have no identities. */
-export type ExternalProvider = "google" | "github" | "ldap";
+export type ExternalProvider = "keycloak";
 
 export type Identity = { provider: ExternalProvider; externalId: string };
 
@@ -231,28 +231,25 @@ export async function createUser(input: {
  */
 export async function findOrCreateExternalUser(
   profile: ExternalProfile,
-): Promise<
-  | { ok: true; user: PublicUser }
-  | { ok: false; reason: "email_in_use" | "disabled" }
-> {
+): Promise<PublicUser | null> {
   const store = await getStore();
   const email = profile.email.trim().toLowerCase();
 
   for (const user of store.users.values()) {
     if (user.identities.some((i) => i.provider === profile.provider && i.externalId === profile.externalId)) {
-      if (user.status !== "active") return { ok: false, reason: "disabled" };
-      return { ok: true, user: toPublic(store, user) };
+      if (user.status !== "active") return null;
+      return toPublic(store, user);
     }
   }
 
   const existing = [...store.users.values()].find((u) => u.email === email);
   if (existing) {
     if (!existing.emailVerified || !profile.emailVerified) {
-      return { ok: false, reason: "email_in_use" };
+      return null;
     }
-    if (existing.status !== "active") return { ok: false, reason: "disabled" };
+    if (existing.status !== "active") return null;
     existing.identities.push({ provider: profile.provider, externalId: profile.externalId });
-    return { ok: true, user: toPublic(store, existing) };
+    return toPublic(store, existing);
   }
 
   const user: User = {
@@ -267,7 +264,7 @@ export async function findOrCreateExternalUser(
     otpAttempts: 0,
   };
   store.users.set(user.id, user);
-  return { ok: true, user: toPublic(store, user) };
+  return toPublic(store, user);
 }
 
 export async function updateUser(

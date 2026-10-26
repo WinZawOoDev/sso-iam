@@ -2,12 +2,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Keys are the only values the sign-in routes put in ?error=. Anything else is ignored.
 const MESSAGES: Record<string, string> = {
-  oauth_failed: "Sign-in with that provider failed. Please try again.",
-  oauth_state: "Your sign-in session expired or was invalid. Please try again.",
-  oauth_denied: "Sign-in was cancelled.",
-  oauth_no_email: "Your provider account needs a verified email address to sign in.",
-  oauth_not_configured: "This sign-in method is not configured yet.",
-  email_in_use: "This email is already registered. Sign in with your password first.",
+  AccessDenied: "This Keycloak account can't access this application.",
+  OAuthAccountNotLinked: "This account is already registered. Sign in with your password first.",
+  OAuthCallbackError: "Keycloak sign-in failed. Please try again.",
+  Configuration: "Keycloak sign-in is not configured yet.",
   account_disabled: "This account has been disabled. Contact an administrator.",
 };
 

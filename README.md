@@ -1,37 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SSO IAM
 
-## Getting Started
+A Next.js identity and access management starter with local email/password accounts, email verification, and Keycloak single sign-on. Federated authentication is handled by [Auth.js](https://authjs.dev/) with its Keycloak provider. Users, roles, and permissions are managed by the app.
 
-First, run the development server:
+## Configure Keycloak
+
+1. Create an **OpenID Connect** client in Keycloak and enable client authentication.
+2. Add this valid redirect URI to the client (replace the host for deployed environments):
+
+   ```text
+   http://localhost:3000/api/auth/callback/keycloak
+   ```
+
+3. Copy `.env.example` to `.env.local` and set `AUTH_SECRET`, `SESSION_SECRET`, `AUTH_KEYCLOAK_ID`, `AUTH_KEYCLOAK_SECRET`, and `AUTH_KEYCLOAK_ISSUER`. The issuer must include the realm, such as `https://keycloak.example.com/realms/my-realm`.
+4. Configure Keycloak to return a verified email (`email_verified: true`). The app uses verified email addresses when linking SSO identities to existing local accounts.
+
+Generate the Auth.js secret and set it as `AUTH_SECRET`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx auth secret
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Generate the local-session secret and set it as `SESSION_SECRET`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+openssl rand -base64 32
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Run locally
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3000](http://localhost:3000). A pre-verified admin account is seeded for local testing: `demo@example.com` / `Password123!`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# sso-iam
+- New Keycloak identities are provisioned with the default **Member** role; administrators can assign other roles in the dashboard.
+- The current user and role store is in memory and resets when the server restarts. Replace `src/lib/db/users.ts` with a persistent database before production use.

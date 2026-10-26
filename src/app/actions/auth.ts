@@ -3,15 +3,14 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import * as z from "zod";
+import { signOut } from "@/auth";
 import {
-  DirectoryLoginSchema,
   ForgotPasswordSchema,
   LoginSchema,
   OtpSchema,
   RegisterSchema,
   type FormState,
 } from "@/lib/auth/definitions";
-import { authenticateDirectoryUser } from "@/lib/auth/ldap";
 import { checkOtp, completeVerification, sendOtp } from "@/lib/auth/otp";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import {
@@ -21,7 +20,7 @@ import {
   getPendingVerificationUserId,
   setPendingVerification,
 } from "@/lib/auth/session";
-import { createUser, findOrCreateExternalUser, findUserByEmail } from "@/lib/db/users";
+import { createUser, findUserByEmail } from "@/lib/db/users";
 
 const str = (value: FormDataEntryValue | null) => String(value ?? "");
 
@@ -172,48 +171,7 @@ export async function forgotPassword(
   };
 }
 
-export async function directoryLogin(_prev: FormState, formData: FormData): Promise<FormState> {
-  const username = str(formData.get("username"));
-  const password = str(formData.get("password"));
-
-  const parsed = DirectoryLoginSchema.safeParse({ username, password });
-  if (!parsed.success) {
-    return { errors: z.flattenError(parsed.error).fieldErrors };
-  }
-
-  const result = await authenticateDirectoryUser(parsed.data.username, parsed.data.password);
-  if (!result.ok) {
-    const messages = {
-      invalid: "Invalid username or password.",
-      unavailable: "The directory is unavailable right now. Try again later.",
-      no_email: "Your directory account has no email address. Contact your administrator.",
-      not_configured: "Directory sign-in is not configured.",
-    } as const;
-    return { message: messages[result.reason] };
-  }
-
-  // The directory has already verified the user, so no OTP step is needed.
-  const linked = await findOrCreateExternalUser({
-    provider: "ldap",
-    externalId: result.externalId,
-    email: result.email,
-    emailVerified: true,
-    name: result.name,
-  });
-  if (!linked.ok) {
-    return {
-      message:
-        linked.reason === "disabled"
-          ? "This account has been disabled. Contact an administrator."
-          : "This email is already registered. Sign in with your password first.",
-    };
-  }
-
-  await createSession(linked.user.id);
-  redirect("/dashboard");
-}
-
 export async function logout() {
   await deleteSession();
-  redirect("/login");
+  await signOut({ redirectTo: "/login" });
 }
